@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://karthisubramanian.github.io/fuel-bill-generator/sitemap.xml
