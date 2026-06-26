@@ -151,8 +151,8 @@
     <div class="card">
       <h2>Select Your Template</h2>
       <div class="body opts">
-        <label class="opt"><input type="radio" name="tpl" value="1" checked>Template 1 · IndianOil</label>
-        <label class="opt"><input type="radio" name="tpl" value="2">Template 2 · Bharat Petroleum</label>
+        <label class="opt"><input type="radio" name="tpl" value="1">Template 1 · IndianOil</label>
+        <label class="opt"><input type="radio" name="tpl" value="2" checked>Template 2 · Bharat Petroleum</label>
         <label class="opt"><input type="radio" name="tpl" value="3">Template 3 · GST Invoice</label>
       </div>
     </div>
@@ -166,15 +166,15 @@
       <h2>Pump Logo &nbsp;·&nbsp; Paper &amp; Font</h2>
       <div class="body">
         <div class="opts" id="logoOpts" style="margin-bottom:12px">
-          <label class="opt"><input type="radio" name="logo" value="iocl" checked>Indian Oil</label>
+          <label class="opt"><input type="radio" name="logo" value="iocl">Indian Oil</label>
           <label class="opt"><input type="radio" name="logo" value="hp">Hp Oil</label>
-          <label class="opt"><input type="radio" name="logo" value="bpcl">Bharat Petroleum</label>
+          <label class="opt"><input type="radio" name="logo" value="bpcl" checked>Bharat Petroleum</label>
         </div>
         <div class="grid3">
           <div class="field"><label>Paper width</label>
-            <select id="paperW"><option value="80,48">80 mm (48 col)</option><option value="58,32">58 mm (32 col)</option></select></div>
+            <select id="paperW"><option value="80,48">80 mm (48 col)</option><option value="58,32" selected>58 mm (32 col)</option></select></div>
           <div class="field"><label>Thermal font</label>
-            <select id="fontSel"><option value="">Share Tech Mono</option><option value="font-scp">Source Code Pro</option><option value="font-vt323">VT323 (dot)</option></select></div>
+            <select id="fontSel"><option value="">Share Tech Mono</option><option value="font-scp">Source Code Pro</option><option value="font-vt323" selected>VT323 (dot)</option></select></div>
         </div>
       </div>
     </div>
@@ -486,7 +486,7 @@ function fitFont(){
 /* ===================================================================
    RENDER
    =================================================================== */
-let curTex=0;
+let curTex=3;
 function render(){
   const d=gather();
   // auto-calc volume / amount like a pump preset
@@ -514,7 +514,7 @@ function render(){
 function buildTexOpts(){
   const c=$('texOpts');
   c.innerHTML=TEXTURES.map((_,i)=>
-    `<label class="opt"><input type="radio" name="tex" value="${i}" ${i===0?'checked':''}>Texture ${i+1}</label>`).join('');
+    `<label class="opt"><input type="radio" name="tex" value="${i}" ${i===3?'checked':''}>Texture ${i+1}</label>`).join('');
   c.addEventListener('change',e=>{curTex=+e.target.value;render();});
 }
 
