@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Free Fuel Bill Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- ESC/POS-style monospace thermal fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Source+Code+Pro:wght@400;600&family=Noto+Sans+Devanagari:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root{
+    --blue:#4a7bbf; --bg:#f4f6f9; --line:#dfe4ea;
+    --paper-mm:80;            /* thermal paper width in mm */
+    --margin-mm:4;            /* left/right print margin in mm */
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,Arial,sans-serif;background:var(--bg);color:#1f2933}
+  header.top{text-align:center;padding:26px 16px 6px}
+  header.top h1{margin:0;font-size:34px;font-weight:800;color:#222}
+  header.top .sub{margin-top:8px;font-size:18px;color:#5b6470;display:inline-flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+  header.top .pill{background:#2f6fed;color:#fff;font-weight:700;font-size:15px;padding:6px 14px;border-radius:20px}
+  .wrap{display:grid;grid-template-columns:minmax(0,1fr) 440px;gap:24px;max-width:1320px;margin:18px auto 60px;padding:0 20px}
+  @media(max-width:940px){.wrap{grid-template-columns:1fr}}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .card>h2{margin:0;background:var(--blue);color:#fff;font-size:16px;font-weight:600;padding:12px 18px}
+  .card .body{padding:16px 18px}
+  .opts{display:flex;flex-wrap:wrap;gap:10px 22px}
+  .opt{display:inline-flex;align-items:center;gap:8px;font-size:15px;cursor:pointer;user-select:none}
+  .opt input{width:17px;height:17px;accent-color:var(--blue);cursor:pointer}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:600px){.grid3{grid-template-columns:1fr 1fr}}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:13px;font-weight:700;color:#333}
+  .field input,.field select{padding:9px 10px;border:1px solid #cfd6df;border-radius:6px;font-size:14px;font-family:inherit;background:#fff}
+  .field input:focus,.field select:focus{outline:2px solid var(--blue);border-color:var(--blue)}
+  .hidden{display:none!important}
+
+  /* OCR card */
+  .ocr-drop{border:2px dashed #b9c3d0;border-radius:8px;padding:18px;text-align:center;cursor:pointer;background:#fafbfc;transition:.15s}
+  .ocr-drop:hover{border-color:var(--blue);background:#f1f5fb}
+  .ocr-drop.drag{border-color:var(--blue);background:#eaf1fb}
+  .ocr-drop .big{font-size:15px;font-weight:700;color:#37424f}
+  .ocr-drop .small{font-size:12px;color:#7a828d;margin-top:4px}
+  .ocr-row{display:flex;gap:14px;align-items:flex-start;margin-top:14px}
+  .ocr-row.hidden{display:none}
+  .ocr-thumb{width:88px;flex:0 0 88px;border:1px solid #dde3ea;border-radius:6px;background:#fff;object-fit:contain;max-height:130px}
+  .ocr-info{flex:1;min-width:0}
+  .prog{height:8px;border-radius:5px;background:#e6ebf1;overflow:hidden;margin:6px 0}
+  .prog>i{display:block;height:100%;width:0;background:var(--blue);transition:.2s}
+  .ocr-status{font-size:13px;color:#46505c}
+  .ocr-raw{width:100%;height:96px;margin-top:8px;font-family:'Share Tech Mono',monospace;font-size:11px;border:1px solid #dde3ea;border-radius:6px;padding:8px;resize:vertical;color:#333;background:#fff}
+  .ocr-btns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .mini{border:none;border-radius:6px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;color:#fff;background:var(--blue)}
+  .mini.ghost{background:#e9edf2;color:#3b4654}
+  .ocr-matched{font-size:12px;color:#2f8f4e;margin-top:6px;line-height:1.5}
+
+  .previewCol{position:sticky;top:16px;align-self:start}
+  .previewFrame{background:#8a8a8a;border-radius:10px;padding:26px 0 34px;display:flex;justify-content:center;min-height:560px}
+  .toolbar{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .btn{flex:1;min-width:130px;border:none;border-radius:8px;padding:12px 14px;font-size:15px;font-weight:700;cursor:pointer;color:#fff}
+  .btn.png{background:#2f8f4e}.btn.png:hover{background:#26793f}
+  .btn.pdf{background:#c0504d}.btn.pdf:hover{background:#a8413e}
+  .hint{font-size:12px;color:#6b7480;margin-top:8px;text-align:center;line-height:1.5}
+
+  /* ===== RECEIPT — millimeter sized like real 80mm thermal paper ===== */
+  .receipt{
+    width:calc(var(--paper-mm) * 1mm);
+    background:#f7f6f2;color:#141414;
+    padding:7mm calc(var(--margin-mm) * 1mm) 9mm;
+    position:relative;
+    box-shadow:0 6px 20px rgba(0,0,0,.4);
+    background-blend-mode:multiply;background-size:cover;background-position:center;
+    /* torn zig-zag top & bottom edge */
+    -webkit-mask:
+      radial-gradient(7px at 7px 0,transparent 98%,#000) repeat-x top/14px 14px,
+      linear-gradient(#000,#000) center/100% calc(100% - 22px) no-repeat,
+      radial-gradient(7px at 7px 14px,#000 98%,transparent) repeat-x bottom/14px 14px;
+    mask:
+      radial-gradient(7px at 7px 0,transparent 98%,#000) repeat-x top/14px 14px,
+      linear-gradient(#000,#000) center/100% calc(100% - 22px) no-repeat,
+      radial-gradient(7px at 7px 14px,#000 98%,transparent) repeat-x bottom/14px 14px;
+  }
+  .receipt .logo{display:flex;justify-content:center;margin-bottom:2mm}
+  .receipt .logo img{width:24mm;height:auto;image-rendering:auto;filter:grayscale(1) contrast(1.04) brightness(1.02) blur(.2px);mix-blend-mode:multiply;opacity:.93}
+  /* fixed-width firmware text block — printed ink, not HD vector */
+  pre.r-text{
+    margin:0;white-space:pre;font-family:'Share Tech Mono','Source Code Pro','Courier New',monospace;
+    line-height:1.42;letter-spacing:0;font-weight:400;
+    color:#34322e;                 /* faded ink, not jet black */
+    mix-blend-mode:multiply;       /* ink soaks into the paper / creases show through */
+    opacity:.9;
+    filter:url(#scanInk);          /* scan warp + soften + uneven density */
+    position:relative;z-index:1;
+  }
+  /* grain/haze pass OVER logo + text so everything shares one captured look */
+  .receipt::after{
+    content:'';position:absolute;inset:0;pointer-events:none;z-index:2;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='9'/><feColorMatrix type='saturate' values='0'/><feComponentTransfer><feFuncA type='linear' slope='0.45'/></feComponentTransfer></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    mix-blend-mode:multiply;opacity:.38;
+  }
+  body.font-vt323 pre.r-text{font-family:'VT323','Share Tech Mono',monospace;line-height:1.2}
+  body.font-scp   pre.r-text{font-family:'Source Code Pro',monospace}
+
+  @media print{
+    @page{size:auto;margin:0}
+    body *{visibility:hidden}
+    #captureArea,#captureArea *{visibility:visible}
+    #captureArea{position:fixed;inset:0;display:flex;justify-content:center;align-items:flex-start;padding-top:6mm;background:#fff}
+    .previewFrame{background:#fff!important;padding:0}
+    .receipt{box-shadow:none;-webkit-mask:none;mask:none}
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Free Fuel Bill Generator</h1>
+  <div class="sub">Fill in Your Information and Generate Fuel Bill <span class="pill">⛽ Fuel card service</span></div>
+</header>
+
+<div class="wrap">
+  <!-- ============ CONTROLS ============ -->
+  <div class="controls">
+    <div class="card">
+      <h2>Auto-fill from Receipt &nbsp;·&nbsp; OCR <span style="font-weight:400;opacity:.85">(optional)</span></h2>
+      <div class="body">
+        <div class="ocr-drop" id="ocrDrop">
+          <div class="big">📷 Upload a receipt photo</div>
+          <div class="small">Click or drop a JPG/PNG. Text is read in your browser (Tesseract.js) and mapped to the fields below.</div>
+          <input type="file" id="ocrFile" accept="image/*" class="hidden">
+        </div>
+        <div class="ocr-row hidden" id="ocrRow">
+          <img class="ocr-thumb" id="ocrThumb" alt="receipt">
+          <div class="ocr-info">
+            <div class="ocr-status" id="ocrStatus">Reading…</div>
+            <div class="prog"><i id="ocrBar"></i></div>
+            <div class="ocr-matched" id="ocrMatched"></div>
+            <textarea class="ocr-raw hidden" id="ocrRaw" spellcheck="false" placeholder="Recognised text…"></textarea>
+            <div class="ocr-btns">
+              <button class="mini" id="ocrApply">Apply to form</button>
+              <button class="mini ghost" id="ocrToggleRaw">Show/Edit text</button>
+              <button class="mini ghost" id="ocrClear">Clear</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Select Your Template</h2>
+      <div class="body opts">
+        <label class="opt"><input type="radio" name="tpl" value="1" checked>Template 1 · IndianOil</label>
+        <label class="opt"><input type="radio" name="tpl" value="2">Template 2 · Bharat Petroleum</label>
+        <label class="opt"><input type="radio" name="tpl" value="3">Template 3 · GST Invoice</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Select Paper Texture</h2>
+      <div class="body opts" id="texOpts"></div>
+    </div>
+
+    <div class="card">
+      <h2>Pump Logo &nbsp;·&nbsp; Paper &amp; Font</h2>
+      <div class="body">
+        <div class="opts" id="logoOpts" style="margin-bottom:12px">
+          <label class="opt"><input type="radio" name="logo" value="iocl" checked>Indian Oil</label>
+          <label class="opt"><input type="radio" name="logo" value="hp">Hp Oil</label>
+          <label class="opt"><input type="radio" name="logo" value="bpcl">Bharat Petroleum</label>
+        </div>
+        <div class="grid3">
+          <div class="field"><label>Paper width</label>
+            <select id="paperW"><option value="80,48">80 mm (48 col)</option><option value="58,32">58 mm (32 col)</option></select></div>
+          <div class="field"><label>Thermal font</label>
+            <select id="fontSel"><option value="">Share Tech Mono</option><option value="font-scp">Source Code Pro</option><option value="font-vt323">VT323 (dot)</option></select></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Optional Fields</h2>
+      <div class="body opts">
+        <label class="opt"><input type="checkbox" id="optGstin">GSTIN No.</label>
+        <label class="opt"><input type="checkbox" id="optCst" checked>CST No</label>
+        <label class="opt"><input type="checkbox" id="optLst" checked>LST No</label>
+        <label class="opt"><input type="checkbox" id="optVat" checked>VAT No</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Enter Data</h2>
+      <div class="body">
+        <div class="grid3">
+          <div class="field" style="grid-column:span 3"><label>Station Name / Address</label><input id="address" value="GOKUL FUEL POINT YELANAHALLI, BEGUR 560068"></div>
+          <div class="field"><label>Receipt No</label><input id="receiptNo" value="3098863"></div>
+          <div class="field"><label>Local ID</label><input id="localId" value="1029384756"></div>
+          <div class="field"><label>FIP No</label><input id="fipNo" value="1"></div>
+          <div class="field"><label>Nozzle No</label><input id="nozzleNo" value="1"></div>
+          <div class="field"><label>FCC ID</label><input id="fccId" value=""></div>
+          <div class="field"><label>Tel No</label><input id="telNo" value="3488545"></div>
+          <div class="field"><label>Product</label>
+            <select id="product"><option>Petrol</option><option>Diesel</option><option>XtraPremium</option><option>Speed</option><option>CNG</option></select></div>
+          <div class="field"><label>Preset Type</label>
+            <select id="presetType"><option>Amount</option><option>Volume</option></select></div>
+          <div class="field"><label>Rate (Rs/L)</label><input id="rate" type="number" step="0.01" value="101.94"></div>
+          <div class="field"><label>Amount (Rs)</label><input id="amount" type="number" step="0.01" value="2000"></div>
+          <div class="field"><label>Volume (L)</label><input id="volume" type="number" step="0.001" value="19.619"></div>
+          <div class="field"><label>Date &amp; Time</label><input id="dt" type="datetime-local" value="2026-05-26T14:52"></div>
+          <div class="field"><label>Payment Mode</label>
+            <select id="mode"><option>Cash</option><option>Card</option><option>UPI</option><option>Fuel Card</option></select></div>
+          <div class="field"><label>Vehicle Type</label><input id="vehType" value="Petrol"></div>
+          <div class="field"><label>Vehicle No</label><input id="vehNo" value="TN 12 BR 7909"></div>
+          <div class="field"><label>Customer Name</label><input id="custName" value=""></div>
+          <div class="field"><label>Attendant ID</label><input id="attId" value="not available"></div>
+          <div class="field gstinF"><label>GSTIN No</label><input id="gstin" value="29ABCDE1234F1Z5"></div>
+          <div class="field cstF"><label>CST No</label><input id="cst" value="29670000123"></div>
+          <div class="field lstF"><label>LST No</label><input id="lst" value="LST/2284/06"></div>
+          <div class="field vatF"><label>VAT No</label><input id="vat" value="29670000123"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- hidden SVG filters: make printed ink look photographed/scanned -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <filter id="scanInk" x="-6%" y="-6%" width="112%" height="112%" color-interpolation-filters="sRGB">
+      <!-- gentle paper-curl warp across whole lines -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.013 0.017" numOctaves="2" seed="4" result="w"/>
+      <feDisplacementMap in="SourceGraphic" in2="w" scale="1.5" xChannelSelector="R" yChannelSelector="G" result="dm"/>
+      <!-- soften edges like a camera / scan -->
+      <feGaussianBlur in="dm" stdDeviation="0.38" result="b"/>
+      <!-- uneven ink density -->
+      <feComponentTransfer in="b"><feFuncA type="gamma" amplitude="1" exponent="1.18" offset="0"/></feComponentTransfer>
+    </filter>
+  </defs></svg>
+
+  <!-- ============ PREVIEW ============ -->
+  <div class="previewCol">
+    <div class="previewFrame" id="captureArea">
+      <div class="receipt" id="receipt">
+        <div class="logo" id="logoBox"></div>
+        <pre class="r-text" id="rtext"></pre>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn png" onclick="downloadPNG()">⬇ Download PNG</button>
+      <button class="btn pdf" onclick="window.print()">🖨 Print / PDF</button>
+    </div>
+    <div class="hint">80 mm thermal mockup · firmware-style fixed-width column alignment · open-source style demo generator</div>
+  </div>
+</div>
+
+<script>
+/* ===================================================================
+   PAPER TEXTURES — procedurally generated crumpled-paper data URIs
+   =================================================================== */
+// o = {seed, wrFreq (wrinkle scale), wrInt (wrinkle depth), wrAmt (shading strength),
+//      fiber (fibre strength), edge (edge fade strength)}
+function paperDataURI(o){
+  const s=o.seed, s2=s+37, s3=s+91;
+  const svg =
+  `<svg xmlns='http://www.w3.org/2000/svg' width='340' height='660' viewBox='0 0 340 660'>
+     <defs>
+       <!-- crumple / wrinkle shading: diffuse lighting over low-freq noise -->
+       <filter id='wr' x='-2%' y='-2%' width='104%' height='104%'>
+         <feTurbulence type='fractalNoise' baseFrequency='${o.wrFreq}' numOctaves='3' seed='${s}' result='t'/>
+         <feDiffuseLighting in='t' surfaceScale='${o.wrInt}' diffuseConstant='1.05' lighting-color='#ffffff' result='l'>
+           <feDistantLight azimuth='235' elevation='58'/>
+         </feDiffuseLighting>
+         <feColorMatrix in='l' type='saturate' values='0'/>
+       </filter>
+       <!-- tiny long fibres: stretched high-freq noise -->
+       <filter id='fb'>
+         <feTurbulence type='fractalNoise' baseFrequency='0.55 0.95' numOctaves='3' seed='${s2}' result='f'/>
+         <feColorMatrix in='f' type='saturate' values='0'/>
+         <feComponentTransfer><feFuncA type='linear' slope='${o.fiber}'/></feComponentTransfer>
+       </filter>
+       <!-- micro speckle grain -->
+       <filter id='gr'>
+         <feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='${s3}'/>
+         <feColorMatrix type='saturate' values='0'/>
+         <feComponentTransfer><feFuncA type='linear' slope='0.05'/></feComponentTransfer>
+       </filter>
+       <!-- faded edges (washed-out border like old thermal paper) -->
+       <radialGradient id='vg' cx='50%' cy='47%' r='66%'>
+         <stop offset='0%'  stop-color='#fbf9f3' stop-opacity='0'/>
+         <stop offset='74%' stop-color='#fbf9f3' stop-opacity='0'/>
+         <stop offset='100%' stop-color='#fbf9f3' stop-opacity='${o.edge}'/>
+       </radialGradient>
+       <linearGradient id='ev' x1='0' y1='0' x2='0' y2='1'>
+         <stop offset='0%'   stop-color='#fbf9f3' stop-opacity='${o.edge}'/>
+         <stop offset='9%'   stop-color='#fbf9f3' stop-opacity='0'/>
+         <stop offset='91%'  stop-color='#fbf9f3' stop-opacity='0'/>
+         <stop offset='100%' stop-color='#fbf9f3' stop-opacity='${o.edge}'/>
+       </linearGradient>
+     </defs>
+     <!-- base warm thermal-paper tone -->
+     <rect width='100%' height='100%' fill='#f4f1e9'/>
+     <!-- wrinkle shading multiplied onto the paper -->
+     <rect width='100%' height='100%' filter='url(#wr)' opacity='${o.wrAmt}' style='mix-blend-mode:multiply'/>
+     <!-- fibres + speckle -->
+     <rect width='100%' height='100%' filter='url(#fb)' style='mix-blend-mode:multiply'/>
+     <rect width='100%' height='100%' filter='url(#gr)' style='mix-blend-mode:multiply'/>
+     <!-- faded edges on top -->
+     <rect width='100%' height='100%' fill='url(#vg)'/>
+     <rect width='100%' height='100%' fill='url(#ev)'/>
+   </svg>`;
+  return "url(\"data:image/svg+xml;utf8," + encodeURIComponent(svg) + "\")";
+}
+const TEXTURES = [
+  paperDataURI({seed:7,  wrFreq:'0.012 0.016', wrInt:1.7, wrAmt:0.55, fiber:0.10, edge:0.80}),
+  paperDataURI({seed:23, wrFreq:'0.020 0.026', wrInt:2.2, wrAmt:0.65, fiber:0.13, edge:0.72}),
+  paperDataURI({seed:44, wrFreq:'0.007 0.011', wrInt:1.3, wrAmt:0.45, fiber:0.08, edge:0.88}),
+  paperDataURI({seed:66, wrFreq:'0.028 0.034', wrInt:2.6, wrAmt:0.72, fiber:0.16, edge:0.66}),
+  paperDataURI({seed:88, wrFreq:'0.015 0.009', wrInt:1.9, wrAmt:0.58, fiber:0.11, edge:0.78}),
+  paperDataURI({seed:111,wrFreq:'0.034 0.044', wrInt:3.0, wrAmt:0.80, fiber:0.18, edge:0.60}),
+];
+
+/* ===================================================================
+   PUMP LOGOS — inline SVG, render crisp at any print resolution
+   =================================================================== */
+const LOGOS = {
+  iocl:`<img alt="IndianOil" src="data:image/webp;base64,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">`,
+  hp:`<img alt="HP" src="data:image/webp;base64,UklGRqwIAABXRUJQVlA4WAoAAAAQAAAAbQAAgwAAQUxQSBMAAAABD9D/iAgISBL7vz+I6H/mkwEAAFZQOCByCAAA0CYAnQEqbgCEAD6RQpxMJaMioiIUCrCwEglpABXsvY5/hei490ZreaOtV90f3Hl13x/ED+79Qj8g/mv+e3k8AH59/TP+P/cvG71GvAHsAcD76D7Af5+9A/PM9Q/tD8CH67f9b1mPY36SCmoGyUpePSOz3xGFFI6Bjuz7U26Dfxy44DYFoUaPnu9L+rQfxK8O6NaYJIXHaFIVg37cYz/V+yM4xGO0d199zhB3Uxbq9S+yZ4BwAyWnZDAHyF1BCbs5vLB/8clXoVwNbElPYnWLfuXe9WqTnX6bNCPfa7BHjxiWNe0fPs3A4Wfo664/pJIQoYRTs9eBBJtKY4iyBOVKm168uTK/CKPRUo0vzF5wMht6k2lI/vS2hg29qYU4WqcO8og4CjypSFibxO0X0CB73ftfppVDKG+ZAF+9R3nqAAD9VU1B/9ZTFlvHYXILU9PKh6jzCQ4/i9YZvM+KPtugq3ogj6vY70F/Nsx2Cdq8+C6dAXmKWVyd2xmkz5mLgzIKA/ZBDcUYUlOXRHhhApn8v52rI0AIj0LRLmuf+fc8/zaXPaJ4uNGB5y/bNkU23T8cZKTfDxnbOMDWbeSQHGyK/3WPrYJcG5/TYLLUPNHtJNaPRXNz6XLus9VGffSUewgDevX4kH804fKgjT3Y5lbyFwQ1QYhdUdOHW5fHIxuTFiAvNaGRA0WQVSS9UPO/M7c//cb+eS/Nki7SlPny5y/VktOoS26hlWRMtmeDM76PWBqan5/TBTyQX/24ZnLVZHGJ2U/h1XJQWYwheiayuMiNvptdX5MXFSPnljgyAlV4ntRgq/Xx2um6XrWFszExSbXEVQ+B5YGUGfoRHGrNwOD4ZHfq2Gsh4iQGFt/x6Na91J8b7tizFav8FBfBlp1WwwmqH/AgcP9BT+5h4JllPR82wDxro864QfX6a+IyciLzgkmkBq1Q3POBAM3NdLrjcjKdX/+rDbsYIXwUdM7Y2AHMRK3SF4GbW3MsN8txY61qmMxx6KOPAHpvvVZ9f0nRTyC2krIHrmLYAm6dVkEoAMVcFF8iQQpCvg+DMpDZbyEKlAL4+u+UtIlGUAuCTpHk1z+IpLIQX8G8mHti2JI9xAK0woGplj7hwKnKifrS083stnmiEhw4ch5X+Jq27EWFiJDGnQ0Od1ezgwqt3eoG88H2bjNwDEGM1jMEfx6bErbd5bLBKDMBLw3Ifd0dXfHD2d1x+MDUmW7aT0lRPv2E58HEWlrs/7pI/3P8kac41bKKv/Gmty2kh6mAuKh0ajV14W7MA9N/GNkQJUpwyWwd/GItdBP/YGpJDFkVvyMQYP/FtqihTosYmYcAW3W/nFEC0IUFY6gM6XpxhQ0R49uakwQPPrdQO+qWpKvnqKD42AeKJtBTBXmWz9BO7BX3+/PboST0fHd58IejYGrobOC1my7u3l2dA2OBmIPdEoPJ/XkKHwlE7A3Q9fM+mxeU7tWQ2i96Sb5ujodGPJXti2JXFYH1VUGT1EV4Mabw5s//w4SkcXwnrFrzfIKXL2D6iVOkhfuuTUzrcV59H8P7ocAVBzaFWETwKyGRxqGEaz/29oo6MMKH/mKaxAKrLqQ+J1GbXvYxjKNDoQNYj7T/CTjOhRsXS8B6CiwIAGOhyo8E8P2DL8eksqsvubpNdL2a924wUOWpNIirdvM/OdznONp20ygU8xazyalF1aCjwRQXZa7BHx5I8BAg1tyw9twZl/u56ZZYqkGS9xZVbQggDxb/OEW4SSMEoG89I3xul/XDe4330MZyKdyylQrFtLxGr329U8lPxCPLdBGAWKt/w5qx8Tbju3vpaM2Frs8Y5njRFncGc9I/ksSFc6pfrBPvy8cSEWihDQephWWVzbUbERlBIom2PDK4/dDGQR5aHTX3SCpV/9Exg4O8iHA7o4WwY7pDy+3GbI0qcHau5qj01ZFCB/1c9g+wbdTiq1Q1jgTL6thfeqTFm+i4Ti0HYTygYfEfrLy/qJreo61619qx5/qdSHyUyXfQqsrKXstVVU36ZTNzxkhIAo4yJp0c8c/2EgWTk16G2ek4i7jl8R75M2yjLX4ycZqGrFsMwbS9aLGrNY7vXt7R/W2ssdyOFrZyZRjKriEEx5OV8UJgDZrcf7fnPydeyjwc1ltrnyrGrr5wyr1ZBsS6nO442Ye7lrGw/Kej8XiQUS2oXDlECV8mCBd2T/wdjtbDCa7ROccXRLK7Io3R2tpKqvmFc5fezkuo6CvKeeev/34Pst168bS9W+//5/io5cSNopHs3oEcMapPvkENQEAZga0Vv9EP3uhM2ZUPRMk1spCWU1WxLbbkKiEjbf5PFr75DW2vvgXECeHXBla11zDLh3ioVf2BNzzvmjXOmOCAovs/63RI41Irk9msAQtCMte/rtblcPjE71mf9v1S32Gpf/LL6Xpi+eqqEQYrcFKuJ0bGr+QM/3kkR+b34A6H2JGyC9eSBD9Vv4aD/XzgupHl3QoxmksIwC6ypTbzx4VkAGt1rXWGz3HWOQWT1Cgt+uV2tQ8MMvr6EfwOgWAyv5BTQ9uIStj5ECIQ6NUmRh/iv3ra6jmB8kigR8S9UydQB1zUGPm1P1/MAb2GG9HzkZ8cJ4JO1zHheXQP7n7b9Bj0jw4uFBIf3neYhXiFBd78no+xXtzZRrjiTqMHOd/eIb8NiWFjtc/GR3asIA3HEAVgtdbYBGKtZeSL99YzfpHso4pBWHR4GUNmNi/8qpOWWx7ON1LTPpnbwdfVY0GR2lPyMbz9rHXl8r7pU3yJ7oZKVzUD16O/UeEzjHUvPyXgOD63Lmd6BnTG8bcW0CfD43MwasFb40b1xW3hWLLuiwr0gyNfGIL/j7s06+l3pnYRDUYQtUnanXgH5XjfAOi+R2AAAAA=">`,
+  bpcl:`<img alt="Bharat Petroleum" src="data:image/webp;base64,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">`
+};
+
+/* ===================================================================
+   FIRMWARE-STYLE LINE BUILDER  (fixed character width, like ESC/POS)
+   =================================================================== */
+let W = 48;          // columns across the printable paper
+const $=id=>document.getElementById(id);
+
+function center(s){ s=String(s);
+  if(s.length>=W) return s.slice(0,W);
+  const pad=Math.floor((W-s.length)/2); return ' '.repeat(pad)+s; }
+function rule(ch='-'){ return ch.repeat(W); }
+function wrap(s){ s=String(s); const out=[]; let line='';
+  s.split(/\s+/).forEach(w=>{
+    if((line+' '+w).trim().length>W){ out.push(line.trim()); line=w; }
+    else line=(line+' '+w).trim();
+  });
+  if(line) out.push(line); return out; }
+function wrapCenter(s){ return wrap(s).map(center).join('\n'); }
+// label : value, colon fixed at column LBL  (OCR-matched spacing)
+function kv(label,value,LBL){
+  label=String(label); value=String(value);
+  const left=(label.length>=LBL? label.slice(0,LBL) : label.padEnd(LBL));
+  let full=left+': '+value;
+  if(full.length<=W) return full;
+  // wrap long values under the colon column
+  const indent=' '.repeat(LBL+2); const head=left+': ';
+  const avail=W-head.length; const words=value.split(/\s+/); const lines=[]; let cur='';
+  words.forEach(wd=>{ if((cur+' '+wd).trim().length>avail){lines.push(cur.trim());cur=wd;} else cur=(cur+' '+wd).trim(); });
+  if(cur) lines.push(cur.trim());
+  return lines.map((ln,i)=> i===0? head+ln : indent+ln).join('\n');
+}
+// label left, value RIGHT-aligned to column W  (firmware total alignment)
+function lr(label,value){
+  label=String(label); value=String(value);
+  const gap=W-label.length-value.length;
+  return gap>=1 ? label+' '.repeat(gap)+value : (label+' '+value).slice(0,W);
+}
+
+/* ---------- helpers ---------- */
+function fmtDate(v){ if(!v) return ''; const d=new Date(v); if(isNaN(d)) return v;
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+const num=(v,dp)=> (parseFloat(v)||0).toFixed(dp);
+
+function gather(){
+  const pw=$('paperW').value.split(','); W=+pw[1];
+  document.documentElement.style.setProperty('--paper-mm',pw[0]);
+  return {
+    address:$('address').value, receiptNo:$('receiptNo').value, localId:$('localId').value,
+    fipNo:$('fipNo').value, nozzleNo:$('nozzleNo').value, fccId:$('fccId').value, telNo:$('telNo').value,
+    product:$('product').value, presetType:$('presetType').value,
+    rate:$('rate').value, amount:$('amount').value, volume:$('volume').value,
+    dt:$('dt').value, mode:$('mode').value, vehType:$('vehType').value, vehNo:$('vehNo').value,
+    custName:$('custName').value, attId:$('attId').value,
+    gstin:$('gstin').value, cst:$('cst').value, lst:$('lst').value, vat:$('vat').value,
+    optGstin:$('optGstin').checked, optCst:$('optCst').checked, optLst:$('optLst').checked, optVat:$('optVat').checked,
+    logo:document.querySelector('input[name=logo]:checked').value,
+    tpl:document.querySelector('input[name=tpl]:checked').value
+  };
+}
+function optionalLines(d,LBL){
+  const L=[];
+  if(d.optGstin) L.push(kv('GSTIN NO',d.gstin,LBL));
+  if(d.optCst)   L.push(kv('CST NO',d.cst,LBL));
+  if(d.optLst)   L.push(kv('LST NO',d.lst,LBL));
+  if(d.optVat)   L.push(kv('VAT NO',d.vat,LBL));
+  return L;
+}
+
+/* ===================================================================
+   TEMPLATES  (return array of text lines, firmware-aligned)
+   =================================================================== */
+function tpl1(d){ const L=14, lines=[];      // IndianOil
+  lines.push(center('Welcomes You'),'');
+  wrap(d.address).forEach(x=>lines.push(center(x)));
+  lines.push('');
+  lines.push(kv('Receipt No',d.receiptNo,L));
+  lines.push(kv('Local ID',d.localId,L));
+  lines.push(kv('FIP No',d.fipNo,L));
+  lines.push(kv('Nozzle No',d.nozzleNo,L));
+  lines.push(kv('Product',d.product,L),'');
+  lines.push(kv('Preset Type',d.presetType,L));
+  lines.push(kv('Rate(Rs/L)',num(d.rate,2),L));
+  lines.push(kv('Volume(L)',num(d.volume,3).padStart(8,'0'),L));
+  lines.push(kv('Amount(Rs)',num(d.amount,3),L));
+  lines.push(kv('Atot',num(d.volume,3).padStart(10,'0')+'.000',L),'');
+  lines.push(kv('Date',fmtDate(d.dt),L));
+  lines.push(kv('Mode',d.mode,L));
+  if(d.vehNo) lines.push(kv('Veh No',d.vehNo,L));
+  if(d.custName) lines.push(kv('Customer',d.custName,L));
+  optionalLines(d,L).forEach(x=>lines.push(x));
+  lines.push('',rule('*'),center('Thank You! Visit Again'));
+  return lines;
+}
+function tpl2(d){ const L=14, lines=[];      // Bharat Petroleum
+  lines.push(center('WELCOME!!!'),'');
+  wrap(d.address).forEach(x=>lines.push(center(x)));
+  lines.push('');
+  lines.push(kv('TEL NO',d.telNo,L));
+  lines.push(kv('RECEIPT NO',d.receiptNo,L));
+  lines.push(kv('FCC ID',d.fccId,L));
+  lines.push(kv('FIP NO',d.fipNo,L));
+  lines.push(kv('NOZZLE NO',d.nozzleNo,L),'');
+  lines.push(kv('PRODUCT',d.product,L));
+  lines.push(kv('RATE/LTR',num(d.rate,2),L));
+  lines.push(kv('AMOUNT',num(d.amount,0),L));
+  lines.push(kv('VOLUME(LTR)',num(d.volume,2)+' lt',L),'');
+  lines.push(kv('VEH TYPE',d.vehType,L));
+  lines.push(kv('VEH NO',d.vehNo,L));
+  lines.push(kv('CUSTOMER NAME',d.custName,L),'');
+  lines.push(kv('DATE',fmtDate(d.dt),L));
+  lines.push(kv('MODE',d.mode,L));
+  optionalLines(d,L).forEach(x=>lines.push(x));
+  lines.push(kv('ATTENDANT ID',d.attId,L),'','');
+  lines.push(rule('*'),center('Thank You! Visit Again'),center('Save Fuel, Save Money.'));
+  return lines;
+}
+function tpl3(d){ const L=12, lines=[];      // GST tax invoice
+  lines.push(center('TAX INVOICE'));
+  wrap(d.address).forEach(x=>lines.push(center(x)));
+  lines.push(rule('-'));
+  lines.push(kv('Inv No',d.receiptNo,L));
+  lines.push(kv('Date',fmtDate(d.dt),L));
+  lines.push(kv('FIP/Nozzle',d.fipNo+' / '+d.nozzleNo,L));
+  lines.push(rule('-'));
+  lines.push(lr('PRODUCT',d.product));
+  lines.push(kv('Rate /L',num(d.rate,2),L));
+  lines.push(kv('Qty (L)',num(d.volume,2),L));
+  lines.push(rule('-'));
+  lines.push(lr('TOTAL Rs',num(d.amount,2)));   // firmware right-align
+  lines.push(kv('Mode',d.mode,L));
+  if(d.vehNo) lines.push(kv('Veh No',d.vehNo,L));
+  optionalLines(d,L).forEach(x=>lines.push(x));
+  lines.push(kv('Attendant',d.attId,L));
+  lines.push(rule('-'),center('------ E&OE ------'),center('Thank You! Visit Again'));
+  return lines;
+}
+const RENDERERS={'1':tpl1,'2':tpl2,'3':tpl3};
+
+/* ===================================================================
+   AUTO-FIT — scale font so W columns exactly fill printable width
+   =================================================================== */
+function fitFont(){
+  const rc=$('receipt'), pre=$('rtext');
+  const cs=getComputedStyle(rc);
+  const target=rc.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const ruler=document.createElement('pre');
+  ruler.style.cssText='position:absolute;visibility:hidden;white-space:pre;margin:0;left:-9999px;font-size:100px';
+  ruler.style.fontFamily=getComputedStyle(pre).fontFamily;
+  ruler.style.letterSpacing=getComputedStyle(pre).letterSpacing;
+  ruler.textContent='0'.repeat(W);
+  document.body.appendChild(ruler);
+  const per100=ruler.getBoundingClientRect().width;
+  ruler.remove();
+  if(per100>0) pre.style.fontSize=(target/per100*100)+'px';
+}
+
+/* ===================================================================
+   RENDER
+   =================================================================== */
+let curTex=0;
+function render(){
+  const d=gather();
+  // auto-calc volume / amount like a pump preset
+  const r=parseFloat(d.rate)||0, a=parseFloat(d.amount)||0, v=parseFloat(d.volume)||0;
+  if(d.presetType==='Amount' && r>0){ d.volume=(a/r).toFixed(3); $('volume').value=d.volume; $('volume').readOnly=true; }
+  else if(d.presetType==='Volume' && r>0){ d.amount=(v*r).toFixed(2); $('amount').value=d.amount; $('volume').readOnly=false; }
+  else { $('volume').readOnly=false; }
+
+  // toggle optional input fields
+  document.querySelector('.gstinF').classList.toggle('hidden',!d.optGstin);
+  document.querySelector('.cstF').classList.toggle('hidden',!d.optCst);
+  document.querySelector('.lstF').classList.toggle('hidden',!d.optLst);
+  document.querySelector('.vatF').classList.toggle('hidden',!d.optVat);
+
+  // font class
+  document.body.className=$('fontSel').value;
+
+  $('logoBox').innerHTML=LOGOS[d.logo];
+  $('rtext').textContent=RENDERERS[d.tpl](d).join('\n');
+  $('receipt').style.backgroundImage=TEXTURES[curTex];
+  fitFont();
+}
+
+/* ---------- texture chips ---------- */
+function buildTexOpts(){
+  const c=$('texOpts');
+  c.innerHTML=TEXTURES.map((_,i)=>
+    `<label class="opt"><input type="radio" name="tex" value="${i}" ${i===0?'checked':''}>Texture ${i+1}</label>`).join('');
+  c.addEventListener('change',e=>{curTex=+e.target.value;render();});
+}
+
+/* ---------- PNG export (post-processed to look photographed/scanned) ---------- */
+function makeGrain(w,h,amt){
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const x=c.getContext('2d'), img=x.createImageData(w,h), d=img.data;
+  for(let i=0;i<d.length;i+=4){ const v=215+Math.random()*40; d[i]=d[i+1]=d[i+2]=v; d[i+3]=Math.random()*255*amt; }
+  x.putImageData(img,0,0); return c;
+}
+function downloadPNG(){
+  // html2canvas can't render SVG filters / blend modes, so we capture crisp,
+  // then bake the camera/scan look onto the canvas so export matches preview.
+  html2canvas($('receipt'),{backgroundColor:null,scale:3,useCORS:true}).then(src=>{
+    const w=src.width, h=src.height;
+    const out=document.createElement('canvas'); out.width=w; out.height=h;
+    const ctx=out.getContext('2d');
+    // soften + slightly fade, like a phone photo of a receipt
+    ctx.filter=`blur(${Math.max(0.5,w/1500).toFixed(2)}px) contrast(0.95) brightness(1.02) saturate(0.9)`;
+    ctx.drawImage(src,0,0);
+    ctx.filter='none';
+    // film grain (multiply)
+    ctx.globalCompositeOperation='multiply'; ctx.globalAlpha=0.5;
+    ctx.drawImage(makeGrain(w,h,0.10),0,0);
+    ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+    // gentle vignette / uneven lighting
+    const vg=ctx.createRadialGradient(w/2,h*0.45,w*0.18,w/2,h*0.5,w*0.78);
+    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(45,38,26,0.13)');
+    ctx.fillStyle=vg; ctx.fillRect(0,0,w,h);
+    const a=document.createElement('a');
+    a.download='fuel-bill.png'; a.href=out.toDataURL('image/png'); a.click();
+  });
+}
+
+/* ===================================================================
+   OCR — read a receipt photo (Tesseract.js) and map text to the form
+   =================================================================== */
+const pad2=n=>String(n).padStart(2,'0');
+let ocrText='';
+
+function parseDate(s){ s=String(s).trim();
+  let m=s.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:\D+(\d{1,2}):(\d{2}))?/);
+  if(m) return `${m[1]}-${pad2(m[2])}-${pad2(m[3])}T${pad2(m[4]||0)}:${pad2(m[5]||0)}`;
+  m=s.match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})(?:\D+(\d{1,2}):(\d{2}))?/);
+  if(m){ let Y=m[3]; if(Y.length===2) Y='20'+Y; return `${Y}-${pad2(m[2])}-${pad2(m[1])}T${pad2(m[4]||0)}:${pad2(m[5]||0)}`; }
+  return '';
+}
+const numOf=s=>{ const m=String(s).replace(/[, ]/g,'').match(/-?\d+(?:\.\d+)?/); return m?m[0]:''; };
+
+// label patterns -> [fieldKey, transform]   (order matters: specific first)
+const OCR_RULES=[
+  [/receipt\s*no/i,'receiptNo'],
+  [/local\s*id/i,'localId'],
+  [/fcc\s*id/i,'fccId'],
+  [/fip\s*no/i,'fipNo'],
+  [/nozzle\s*no/i,'nozzleNo'],
+  [/tel\s*no/i,'telNo'],
+  [/preset\s*type/i,'presetType'],
+  [/rate\s*[\/(]?\s*(?:rs)?\s*[\/)]?\s*l/i,'rate',numOf],
+  [/amount/i,'amount',numOf],
+  [/volume/i,'volume',numOf],
+  [/product/i,'product'],
+  [/veh(?:icle)?\s*type/i,'vehType'],
+  [/veh(?:icle)?\s*no/i,'vehNo'],
+  [/customer/i,'custName'],
+  [/attendant\s*id/i,'attId'],
+  [/\bmode\b/i,'mode'],
+  [/gstin/i,'gstin'],
+  [/cst\s*no/i,'cst'],
+  [/lst\s*no/i,'lst'],
+  [/vat\s*no/i,'vat'],
+  [/\bdate\b/i,'dt','date'],
+];
+const FIELD_LABEL={receiptNo:'Receipt No',localId:'Local ID',fccId:'FCC ID',fipNo:'FIP No',
+  nozzleNo:'Nozzle No',telNo:'Tel No',presetType:'Preset Type',rate:'Rate',amount:'Amount',
+  volume:'Volume',product:'Product',vehType:'Veh Type',vehNo:'Veh No',custName:'Customer',
+  attId:'Attendant ID',mode:'Mode',gstin:'GSTIN',cst:'CST',lst:'LST',vat:'VAT',dt:'Date',address:'Address'};
+
+function parseReceipt(text){
+  const lines=text.split(/\r?\n/).map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const found={};
+  const skipHdr=/welcome|welcomes you|visit again|thank|save fuel|indian\s*oil|bharat|petroleum|hindustan|^\*+$|^[-=_*]+$/i;
+  let firstFieldIdx=lines.length;
+
+  lines.forEach((line,idx)=>{
+    let label=line, value='';
+    const ci=line.indexOf(':');
+    if(ci>=0){ label=line.slice(0,ci); value=line.slice(ci+1).trim(); }
+    else { const m=line.match(/^(.*?)\s{2,}(.+)$/); if(m){ label=m[1]; value=m[2]; } }
+    for(const [re,key,tf] of OCR_RULES){
+      if(re.test(label)){
+        if(idx<firstFieldIdx) firstFieldIdx=idx;
+        if(!value || found[key]!=null) break;
+        if(tf==='date'){ const d=parseDate(value); if(d) found.dt=d; }
+        else if(typeof tf==='function'){ const n=tf(value); if(n) found[key]=n; }
+        else found[key]=value;
+        break;
+      }
+    }
+  });
+  // address = header lines above the first recognised field
+  const addr=lines.slice(0,firstFieldIdx).filter(l=>!skipHdr.test(l) && l.length>=4);
+  if(addr.length) found.address=addr.join(', ').replace(/\s*,\s*,+/g,', ');
+  return found;
+}
+
+function setSelect(id,val){ const sel=$(id); if(!val) return false; const v=val.trim().toLowerCase();
+  for(const o of sel.options) if(o.value.toLowerCase()===v||o.text.toLowerCase()===v){ sel.value=o.value; return true; }
+  for(const o of sel.options) if(v.includes(o.value.toLowerCase())){ sel.value=o.value; return true; }
+  return false; }
+
+function applyParsed(p){
+  const filled=[];
+  const SELECTS={product:1,mode:1,presetType:1};
+  for(const k in p){
+    if(k==='dt'){ $('dt').value=p.dt; filled.push(FIELD_LABEL.dt); continue; }
+    if(SELECTS[k]){ if(setSelect(k,p[k])) filled.push(FIELD_LABEL[k]); continue; }
+    const el=$(k); if(el){ el.value=p[k]; filled.push(FIELD_LABEL[k]||k); }
+  }
+  // auto-enable optional sections when those numbers were detected
+  if(p.gstin){ $('optGstin').checked=true; }
+  if(p.cst){ $('optCst').checked=true; }
+  if(p.lst){ $('optLst').checked=true; }
+  if(p.vat){ $('optVat').checked=true; }
+  render();
+  $('ocrMatched').textContent = filled.length
+    ? '✓ Filled: '+[...new Set(filled)].join(', ')
+    : 'No fields recognised — try a sharper, straighter photo or edit the text manually.';
+}
+
+function runOCR(file){
+  if(!file || !window.Tesseract){ return; }
+  $('ocrRow').classList.remove('hidden');
+  $('ocrThumb').src=URL.createObjectURL(file);
+  $('ocrMatched').textContent='';
+  $('ocrBar').style.width='0%';
+  $('ocrStatus').textContent='Loading OCR engine…';
+  Tesseract.recognize(file,'eng',{logger:m=>{
+    if(m.status==='recognizing text'){
+      $('ocrBar').style.width=Math.round(m.progress*100)+'%';
+      $('ocrStatus').textContent='Reading text… '+Math.round(m.progress*100)+'%';
+    } else { $('ocrStatus').textContent=m.status+'…'; }
+  }}).then(({data})=>{
+    ocrText=data.text||'';
+    $('ocrRaw').value=ocrText;
+    $('ocrStatus').textContent='Done — review, then Apply to form';
+    $('ocrBar').style.width='100%';
+    applyParsed(parseReceipt(ocrText));
+  }).catch(err=>{
+    $('ocrStatus').textContent='OCR failed: '+(err.message||err);
+  });
+}
+
+(function wireOCR(){
+  const drop=$('ocrDrop'), file=$('ocrFile');
+  drop.addEventListener('click',()=>file.click());
+  file.addEventListener('change',e=>{ if(e.target.files[0]) runOCR(e.target.files[0]); });
+  ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag');}));
+  ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag');}));
+  drop.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) runOCR(f); });
+  $('ocrApply').addEventListener('click',()=>applyParsed(parseReceipt($('ocrRaw').value||ocrText)));
+  $('ocrToggleRaw').addEventListener('click',()=>$('ocrRaw').classList.toggle('hidden'));
+  $('ocrClear').addEventListener('click',()=>{ $('ocrRow').classList.add('hidden'); file.value=''; ocrText=''; });
+})();
+
+/* ---------- init ---------- */
+document.addEventListener('input',render);
+document.addEventListener('change',render);
+window.addEventListener('resize',fitFont);
+buildTexOpts();
+if(document.fonts && document.fonts.ready){ document.fonts.ready.then(fitFont); }
+window.addEventListener('load',render);
+render();
+</script>
+</body>
+</html>
