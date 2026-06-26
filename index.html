@@ -188,22 +188,14 @@
     </div>
 
     <div class="card">
-      <h2>Select Your Template</h2>
-      <div class="body opts">
-        <label class="opt"><input type="radio" name="tpl" value="1">Template 1 · IndianOil</label>
-        <label class="opt"><input type="radio" name="tpl" value="2" checked>Template 2 · Bharat Petroleum</label>
-        <label class="opt"><input type="radio" name="tpl" value="3">Template 3 · GST Invoice</label>
-      </div>
-    </div>
-
-    <div class="card">
       <h2>Select Paper Texture</h2>
       <div class="body opts" id="texOpts"></div>
     </div>
 
     <div class="card">
-      <h2>Pump Logo &nbsp;·&nbsp; Paper &amp; Font</h2>
+      <h2>Select Fuel Brand &nbsp;·&nbsp; Paper &amp; Font</h2>
       <div class="body">
+        <div class="small" style="margin-bottom:8px;opacity:.75">Picks the logo and the receipt layout.</div>
         <div class="opts" id="logoOpts" style="margin-bottom:12px">
           <label class="opt"><input type="radio" name="logo" value="iocl">Indian Oil</label>
           <label class="opt"><input type="radio" name="logo" value="hp">Hp Oil</label>
@@ -412,6 +404,7 @@ const num=(v,dp)=> (parseFloat(v)||0).toFixed(dp);
 function gather(){
   const pw=$('paperW').value.split(','); W=+pw[1];
   document.documentElement.style.setProperty('--paper-mm',pw[0]);
+  const logo=document.querySelector('input[name=logo]:checked').value;
   return {
     address:$('address').value, receiptNo:$('receiptNo').value, localId:$('localId').value,
     fipNo:$('fipNo').value, nozzleNo:$('nozzleNo').value, fccId:$('fccId').value, telNo:$('telNo').value,
@@ -421,8 +414,8 @@ function gather(){
     custName:$('custName').value, attId:$('attId').value,
     gstin:$('gstin').value, cst:$('cst').value, lst:$('lst').value, vat:$('vat').value,
     optGstin:$('optGstin').checked, optCst:$('optCst').checked, optLst:$('optLst').checked, optVat:$('optVat').checked,
-    logo:document.querySelector('input[name=logo]:checked').value,
-    tpl:document.querySelector('input[name=tpl]:checked').value
+    logo:logo,
+    tpl: logo==='iocl' ? '1' : '2'   // iocl → IndianOil layout; hp & bpcl → BPCL layout
   };
 }
 function optionalLines(d,LBL){
@@ -482,27 +475,7 @@ function tpl2(d){ const L=14, lines=[];      // Bharat Petroleum
   lines.push(rule('*'),center('Thank You! Visit Again'),center('Save Fuel, Save Money.'));
   return lines;
 }
-function tpl3(d){ const L=12, lines=[];      // GST tax invoice
-  lines.push(center('TAX INVOICE'));
-  wrap(d.address).forEach(x=>lines.push(center(x)));
-  lines.push(rule('-'));
-  lines.push(kv('Inv No',d.receiptNo,L));
-  lines.push(kv('Date',fmtDate(d.dt),L));
-  lines.push(kv('FIP/Nozzle',d.fipNo+' / '+d.nozzleNo,L));
-  lines.push(rule('-'));
-  lines.push(lr('PRODUCT',d.product));
-  lines.push(kv('Rate /L',num(d.rate,2),L));
-  lines.push(kv('Qty (L)',num(d.volume,2),L));
-  lines.push(rule('-'));
-  lines.push(lr('TOTAL Rs',num(d.amount,2)));   // firmware right-align
-  lines.push(kv('Mode',d.mode,L));
-  if(d.vehNo) lines.push(kv('Veh No',d.vehNo,L));
-  optionalLines(d,L).forEach(x=>lines.push(x));
-  lines.push(kv('Attendant',d.attId,L));
-  lines.push(rule('-'),center('------ E&OE ------'),center('Thank You! Visit Again'));
-  return lines;
-}
-const RENDERERS={'1':tpl1,'2':tpl2,'3':tpl3};
+const RENDERERS={'1':tpl1,'2':tpl2};
 
 /* ===================================================================
    AUTO-FIT — scale font so W columns exactly fill printable width
